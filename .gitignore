@@ -1,0 +1,28 @@
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Testing cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary downloads (Kaggle raw archive)
+data/*.zip
+data/*.csv
+!data/processed_dataset.parquet
