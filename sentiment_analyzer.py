@@ -227,5 +227,6 @@ def batch_analyze_dataframe(
     result_df["polarity"] = polarities
     result_df["subjectivity"] = subjectivities
     result_df["predicted_sentiment"] = sentiments
+    result_df["sentiment"] = sentiments
 
     return result_df

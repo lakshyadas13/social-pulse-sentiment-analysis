@@ -507,10 +507,11 @@ def main():
     """, unsafe_allow_html=True)
 
     # Main Visualizations Tabbed View
-    tab_analytics, tab_explorer, tab_comparison = st.tabs([
+    tab_analytics, tab_explorer, tab_comparison, tab_upload = st.tabs([
         "Sentiment Distribution & Analysis",
         "Tweet Explorer",
-        "TextBlob vs Dataset Comparison"
+        "TextBlob vs Dataset Comparison",
+        "Upload and Analyze Dataset"
     ])
 
     # --------------------------------------------------------------------------
@@ -750,6 +751,240 @@ def main():
                 irony, contextual colloquialisms, or domain-specific sentiment nuances present in human annotations.
             </div>
             """, unsafe_allow_html=True)
+
+    # --------------------------------------------------------------------------
+    # TAB 4: UPLOAD AND ANALYZE CUSTOM DATASET
+    # --------------------------------------------------------------------------
+    with tab_upload:
+        st.markdown("#### Upload and Analyze Custom Dataset")
+        st.caption(
+            "Upload any external CSV dataset (e.g. social posts, product reviews, feedback surveys) "
+            "to generate sentiment predictions, polarity scores, and interactive analytics."
+        )
+
+        uploaded_file = st.file_uploader(
+            "Select CSV file:",
+            type=["csv"],
+            help="Upload a CSV dataset containing text columns to evaluate.",
+            key="custom_dataset_uploader"
+        )
+
+        if uploaded_file is not None:
+            try:
+                # Read sample to inspect schema
+                preview_df = pd.read_csv(uploaded_file, nrows=5)
+                cols = list(preview_df.columns)
+                uploaded_file.seek(0)
+
+                with st.expander("Dataset Preview (First 5 Rows)", expanded=False):
+                    st.dataframe(preview_df, use_container_width=True)
+
+                col_u1, col_u2 = st.columns([1.5, 1])
+                with col_u1:
+                    # Auto-detect text column
+                    text_candidates = [
+                        c for c in cols if c.lower() in [
+                            "clean_text", "tweet_text", "text", "tweet", "content",
+                            "comment", "review", "body", "message", "feedback", "sentence"
+                        ]
+                    ]
+                    default_text_idx = cols.index(text_candidates[0]) if text_candidates else 0
+                    selected_text_col = st.selectbox(
+                        "Column containing text to analyze:",
+                        options=cols,
+                        index=default_text_idx,
+                        key="custom_text_col_select"
+                    )
+
+                with col_u2:
+                    max_records_opt = st.select_slider(
+                        "Maximum records to analyze:",
+                        options=[250, 500, 1000, 2500, 5000, "All Records"],
+                        value=1000,
+                        help="Limits processing size for faster execution on large files."
+                    )
+
+                if st.button("Generate Sentiment Analysis", key="btn_run_uploaded_analysis"):
+                    with st.spinner("Processing text and calculating sentiment scores..."):
+                        full_uploaded_df = pd.read_csv(uploaded_file)
+                        
+                        # Filter to requested sample if not "All Records"
+                        if isinstance(max_records_opt, int) and len(full_uploaded_df) > max_records_opt:
+                            full_uploaded_df = full_uploaded_df.head(max_records_opt).copy()
+
+                        # Drop nulls in selected text column
+                        clean_input_df = full_uploaded_df.dropna(subset=[selected_text_col]).copy()
+                        clean_input_df[selected_text_col] = clean_input_df[selected_text_col].astype(str)
+
+                        from sentiment_analyzer import batch_analyze_dataframe
+                        scored_custom_df = batch_analyze_dataframe(
+                            clean_input_df,
+                            text_column=selected_text_col,
+                            pos_threshold=pos_thresh,
+                            neg_threshold=neg_thresh
+                        )
+                        st.session_state["custom_analyzed_df"] = scored_custom_df
+                        st.session_state["custom_analyzed_name"] = uploaded_file.name
+
+            except Exception as e:
+                st.error(f"Error parsing uploaded file: {str(e)}")
+
+        # Display results if analyzed data exists in session_state
+        if "custom_analyzed_df" in st.session_state:
+            cust_df = st.session_state["custom_analyzed_df"]
+            dataset_name = st.session_state.get("custom_analyzed_name", "Uploaded Dataset")
+
+            st.markdown("---")
+            st.markdown(f"##### Results for: {dataset_name}")
+
+            total_cust = len(cust_df)
+            pos_cust = int((cust_df["predicted_sentiment"] == "Positive").sum())
+            neu_cust = int((cust_df["predicted_sentiment"] == "Neutral").sum())
+            neg_cust = int((cust_df["predicted_sentiment"] == "Negative").sum())
+            avg_pol_cust = round(float(cust_df["polarity"].mean()), 3) if total_cust > 0 else 0.0
+
+            pos_pct_cust = round((pos_cust / total_cust) * 100, 1) if total_cust > 0 else 0.0
+            neu_pct_cust = round((neu_cust / total_cust) * 100, 1) if total_cust > 0 else 0.0
+            neg_pct_cust = round((neg_cust / total_cust) * 100, 1) if total_cust > 0 else 0.0
+
+            st.markdown(f"""
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Analyzed Records</div>
+                    <div class="metric-value">{total_cust:,}</div>
+                    <div class="metric-subtext">Total Processed</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Positive Sentiment</div>
+                    <div class="metric-value" style="color: #00ba7c;">{pos_cust:,}</div>
+                    <div class="metric-subtext">{pos_pct_cust}% of dataset</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Neutral Sentiment</div>
+                    <div class="metric-value" style="color: #536471;">{neu_cust:,}</div>
+                    <div class="metric-subtext">{neu_pct_cust}% of dataset</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Negative Sentiment</div>
+                    <div class="metric-value" style="color: #f4212e;">{neg_cust:,}</div>
+                    <div class="metric-subtext">{neg_pct_cust}% of dataset</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Average Polarity</div>
+                    <div class="metric-value">{avg_pol_cust:+.3f}</div>
+                    <div class="metric-subtext">Scale: [-1.0 to +1.0]</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Charts for uploaded dataset
+            col_chart_u1, col_chart_u2 = st.columns([1, 1.2])
+
+            sentiment_palette = {
+                "Positive": "#00ba7c",
+                "Neutral": "#536471",
+                "Negative": "#f4212e"
+            }
+
+            dist_cust_data = pd.DataFrame({
+                "sentiment": ["Positive", "Neutral", "Negative"],
+                "count": [pos_cust, neu_cust, neg_cust]
+            })
+
+            with col_chart_u1:
+                st.markdown("###### Sentiment Proportions")
+                fig_cust_pie = go.Figure(data=[go.Pie(
+                    labels=dist_cust_data["sentiment"],
+                    values=dist_cust_data["count"],
+                    hole=0.6,
+                    marker=dict(colors=[sentiment_palette.get(s, "#cfd9de") for s in dist_cust_data["sentiment"]]),
+                    textinfo="label+percent",
+                    hoverinfo="label+value+percent"
+                )])
+                fig_cust_pie.update_layout(
+                    paper_bgcolor="#ffffff",
+                    plot_bgcolor="#ffffff",
+                    font=dict(color="#0f1419", size=13),
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=280,
+                    showlegend=True,
+                    legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5)
+                )
+                st.plotly_chart(fig_cust_pie, use_container_width=True)
+
+            with col_chart_u2:
+                st.markdown("###### Sentiment Counts")
+                fig_cust_bar = px.bar(
+                    dist_cust_data,
+                    x="sentiment",
+                    y="count",
+                    color="sentiment",
+                    color_discrete_map=sentiment_palette,
+                    text="count",
+                    labels={"sentiment": "Sentiment", "count": "Record Count"}
+                )
+                fig_cust_bar.update_traces(texttemplate="%{text:,}", textposition="outside")
+                fig_cust_bar.update_layout(
+                    paper_bgcolor="#ffffff",
+                    plot_bgcolor="#ffffff",
+                    font=dict(color="#0f1419"),
+                    xaxis=dict(showgrid=False, linecolor="#eff3f4"),
+                    yaxis=dict(gridcolor="#eff3f4", linecolor="#eff3f4"),
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    height=280,
+                    showlegend=False
+                )
+                st.plotly_chart(fig_cust_bar, use_container_width=True)
+
+            # Table exploration
+            st.markdown("###### Analyzed Records Explorer")
+            col_search_u, col_filt_u = st.columns([2, 1])
+            with col_search_u:
+                search_cust_query = st.text_input(
+                    "Search in uploaded records:",
+                    value="",
+                    placeholder="Search keywords in text...",
+                    key="custom_search_input"
+                )
+            with col_filt_u:
+                filter_cust_sent = st.multiselect(
+                    "Filter by sentiment:",
+                    options=["Positive", "Neutral", "Negative"],
+                    default=["Positive", "Neutral", "Negative"],
+                    key="custom_sentiment_filter"
+                )
+
+            filtered_cust_table = cust_df[cust_df["predicted_sentiment"].isin(filter_cust_sent)].copy()
+            if search_cust_query.strip():
+                query_str = search_cust_query.strip().lower()
+                filtered_cust_table = filtered_cust_table[
+                    filtered_cust_table["cleaned_text"].str.lower().str.contains(query_str, na=False)
+                ]
+
+            st.caption(f"Showing {len(filtered_cust_table):,} records out of {total_cust:,} analyzed.")
+
+            display_cols_cust = ["cleaned_text", "polarity", "subjectivity", "predicted_sentiment"]
+            st.dataframe(
+                filtered_cust_table[display_cols_cust].rename(columns={
+                    "cleaned_text": "Cleaned Text",
+                    "polarity": "Polarity",
+                    "subjectivity": "Subjectivity",
+                    "predicted_sentiment": "Predicted Sentiment"
+                }),
+                use_container_width=True,
+                height=320,
+                hide_index=True
+            )
+
+            # Download analyzed dataset button
+            csv_cust_bytes = cust_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="Download Analyzed Dataset as CSV",
+                data=csv_cust_bytes,
+                file_name=f"social_pulse_analyzed_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                key="btn_download_custom_analysis"
+            )
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ An enterprise-grade Big Data Analytics (BDA) application that ingests, cleans, c
 * Individual Tweet Sentiment Analysis: A dedicated "Analyze a Tweet" interface allowing users to evaluate single text inputs in real time using TextBlob lexical polarity and configurable thresholds, isolated from dataset aggregates.
 * Twitter/X-Inspired Interface: Clean editorial design featuring a white/light canvas, charcoal typography, subtle gray dividers, and Twitter blue accents with zero emojis.
 * Methodological Evaluation: Cross-tabulated evaluation comparing TextBlob lexical predictions against human-annotated ground-truth labels on sample populations.
+* Custom Dataset Upload & Analysis: Dedicated tab allowing users to upload any external CSV dataset, auto-detect text columns, run sentiment inference, visualize distributions, and export the scored results.
 * Automated Test Suite: 17 comprehensive unit and integration tests with 100% pass rate.
 
 ---
